@@ -1,0 +1,43 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1709109959,
+        "narHash": "sha256-xjEGAZH+ITX+D8ww58mGDS4dglIgoAnuvwTc0yH+wKs=",
+        "ref": "refs/heads/haskell-updates",
+        "rev": "f82850337a0b235f095afcdd86a1009d0dcc4a3f",
+        "revCount": 589620,
+        "type": "git",
+        "url": "file:///home/shaun/nixpkgs"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:///home/shaun/nixpkgs"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "tigerbeetleSrc": "tigerbeetleSrc"
+      }
+    },
+    "tigerbeetleSrc": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1709107638,
+        "narHash": "sha256-Vt1Fe0q/vSGTRuOXkN38Pb3jiRrPFp9QQ/sJlwHxzJA=",
+        "owner": "tigerbeetle",
+        "repo": "tigerbeetle",
+        "rev": "6defd9d8a73944934a9d01c774f170c7416bfb4a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tigerbeetle",
+        "repo": "tigerbeetle",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
