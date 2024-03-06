@@ -33,28 +33,36 @@
         };
     in {
       packages = forallSystems ({ system, pkgs, haskellPackages }: rec {
-        tigerbeetle = pkgs.stdenv.mkDerivation {
-          name = "tigerbeetle";
+        tb_client = pkgs.stdenv.mkDerivation {
+          name = "tb_client";
           src = tigerbeetleSrc;
-          nativeBuildInputs = with pkgs; [ zig.hook ];
-          zigBuildFlags = [ ];
-          dontUseZigCheck = true;
+          nativeBuildInputs = with pkgs; [ zig git ];
+          buildPhase = ''
+            ZIG_GLOBAL_CACHE_DIR=$(mktemp -d)
+            export ZIG_GLOBAL_CACHE_DIR
+            zig build -Drelease=true -Dcpu=baseline -Dgit-commit=${tigerbeetleSrc.rev} -Dversion=${tigerbeetleSrc.rev} c_client
+          '';
+          installPhase = ''
+            mkdir -p $out/lib $out/include
+            cp src/clients/c/lib/x86_64-linux-gnu/* $out/lib
+            cp src/clients/c/lib/include/* $out/include
+          '';
         };
-        htigerbeetle = haskellPackages.callCabal2nix "tigerbeetle" ./. {
-          inherit tigerbeetle;
+        tigerbeetle = haskellPackages.callCabal2nix "tigerbeetle" ./. {
+          inherit tb_client;
         };
-        default = self.packages.${system}.htigerbeetle;
+        default = self.packages.${system}.tigerbeetle;
       });
       devShells = forallSystems ({ system, pkgs, haskellPackages }: {
-        htigerbeetle = haskellPackages.shellFor {
-          packages = p: [ self.packages.${system}.htigerbeetle ];
+        tigerbeetle = haskellPackages.shellFor {
+          packages = p: [ self.packages.${system}.tigerbeetle ];
           buildInputs = with haskellPackages; [
             cabal-install
             haskell-language-server
           ];
           withHoogle = true;
         };
-        default = self.devShells.${system}.htigerbeetle;
+        default = self.devShells.${system}.tigerbeetle;
       });
     };
 }

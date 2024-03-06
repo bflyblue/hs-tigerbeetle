@@ -1,239 +1,175 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-missing-pattern-synonym-signatures #-}
 
-module DuckDB.Internal.Context (
-  Database,
-  Connection,
-  Result,
-  DString(..),
-  Chunk,
-  Vector,
-  LogicalType,
-  State(..),
-  CState(..),
-  fromCState,
-  DbType(..),
-  CDbType(..),
-  fromCDbType,
-  sizeOfDbType,
-  duckdbCtx
+module TigerBeetle.Internal.Client
+( Account(..)
+, AccountFlags
+  ( ACCOUNT_LINKED
+  , ACCOUNT_DEBITS_MUST_NOT_EXCEED_CREDITS
+  , ACCOUNT_CREDITS_MUST_NOT_EXCEED_DEBITS
+  , ACCOUNT_HISTORY)
+, Transfer(..)
+, TransferFlags
+  ( TRANSFER_LINKED
+  , TRANSFER_PENDING
+  , TRANSFER_POST_PENDING_TRANSFER
+  , TRANSFER_VOID_PENDING_TRANSFER
+  , TRANSFER_BALANCING_DEBIT
+  , TRANSFER_BALANCING_CREDIT
+  )
 ) where
 
+import Data.Bits
 import qualified Data.Map as Map
+import Data.Primitive.Types
+import Data.WideWord
+import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Ptr
 import Foreign.Storable
+import qualified Language.C.Inline as C
 import Language.C.Inline.Context
 import qualified Language.C.Types as C
 
-#include <duckdb.h>
+#include <tb_client.h>
 
-data Database
-data Connection
-data Chunk
-data Vector
-data LogicalType
+newtype AccountFlags = AccountFlags Word16 deriving (Eq, Ord, Show, Read, Num, Enum, Real, Integral, Storable, Prim, Bits)
 
-data Result
-instance Storable Result where
-  sizeOf _ = (#size duckdb_result)
-  alignment _ = (#alignment duckdb_result)
-  peek _ = error "peek not implemented for Result"
-  poke _ _ = error "poke not implemented for Result"
+pattern ACCOUNT_LINKED = (#const TB_ACCOUNT_LINKED) :: AccountFlags
+pattern ACCOUNT_DEBITS_MUST_NOT_EXCEED_CREDITS = (#const TB_ACCOUNT_DEBITS_MUST_NOT_EXCEED_CREDITS) :: AccountFlags
+pattern ACCOUNT_CREDITS_MUST_NOT_EXCEED_DEBITS = (#const TB_ACCOUNT_CREDITS_MUST_NOT_EXCEED_DEBITS) :: AccountFlags
+pattern ACCOUNT_HISTORY = (#const TB_ACCOUNT_HISTORY) :: AccountFlags
 
-data DString = DString
-  { dstrSize :: CUInt
-  , dstrString :: String
+data Account = Account
+  { id :: {-# UNPACK #-} !Word128,
+    debits_pending :: {-# UNPACK #-} !Word128,
+    debits_posted :: {-# UNPACK #-} !Word128,
+    credits_pending :: {-# UNPACK #-} !Word128,
+    credits_posted :: {-# UNPACK #-} !Word128,
+    user_data_128 :: {-# UNPACK #-} !Word128,
+    user_data_64 :: {-# UNPACK #-} !Word64,
+    user_data_32 :: {-# UNPACK #-} !Word32,
+    reserved :: {-# UNPACK #-} !Word32,
+    ledger :: {-# UNPACK #-} !Word32,
+    code :: {-# UNPACK #-} !Word16,
+    flags :: {-# UNPACK #-} !AccountFlags,
+    timestamp :: {-# UNPACK #-} !Word64
   }
-  deriving Show
+  deriving (Show, Read, Eq, Ord)
 
-instance Storable DString where
-  sizeOf _ = 4 + sizeOf @CUInt undefined + sizeOf @CString undefined
-  alignment _ = (#alignment uint32_t)
+instance Storable Account where
+  sizeOf _ = (#size tb_account_t)
+  alignment _ = (#alignment tb_account_t)
   peek ptr = do
-    len <- peek (castPtr ptr)
-    sptr <- if (len > 4) then
-              peek (castPtr $ plusPtr ptr 8)
-            else
-              pure (castPtr $ plusPtr ptr 4)
-    str <- peekCStringLen (sptr, fromIntegral len)
-    pure $ DString len str
-  poke _ _ = error "poke not implemented for DString"
+    id <- (#peek tb_account_t, id) ptr
+    debits_pending <- (#peek tb_account_t, debits_pending) ptr
+    debits_posted <- (#peek tb_account_t, debits_posted) ptr
+    credits_pending <- (#peek tb_account_t, credits_pending) ptr
+    credits_posted <- (#peek tb_account_t, credits_posted) ptr
+    user_data_128 <- (#peek tb_account_t, user_data_128) ptr
+    user_data_64 <- (#peek tb_account_t, user_data_64) ptr
+    user_data_32 <- (#peek tb_account_t, user_data_32) ptr
+    reserved <- (#peek tb_account_t, reserved) ptr
+    ledger <- (#peek tb_account_t, ledger) ptr
+    code <- (#peek tb_account_t, code) ptr
+    flags <- (#peek tb_account_t, flags) ptr
+    timestamp <- (#peek tb_account_t, timestamp) ptr
+    pure Account {..}
+  poke ptr Account {..} = do
+    (#poke tb_account_t, id) ptr id
+    (#poke tb_account_t, debits_pending) ptr debits_pending
+    (#poke tb_account_t, debits_posted) ptr debits_posted
+    (#poke tb_account_t, credits_pending) ptr credits_pending
+    (#poke tb_account_t, credits_posted) ptr credits_posted
+    (#poke tb_account_t, user_data_128) ptr user_data_128
+    (#poke tb_account_t, user_data_64) ptr user_data_64
+    (#poke tb_account_t, user_data_32) ptr user_data_32
+    (#poke tb_account_t, reserved) ptr reserved
+    (#poke tb_account_t, ledger) ptr ledger
+    (#poke tb_account_t, code) ptr code
+    (#poke tb_account_t, flags) ptr flags
+    (#poke tb_account_t, timestamp) ptr timestamp
 
-newtype CState = CState { unCState :: CInt }
-  deriving (Show, Eq)
+newtype TransferFlags = TransferFlags Word16 deriving (Eq, Ord, Show, Read, Num, Enum, Real, Integral, Storable, Prim, Bits)
 
-data State
-  = Success
-  | Error
+pattern TRANSFER_LINKED = (#const TB_TRANSFER_LINKED) :: TransferFlags
+pattern TRANSFER_PENDING = (#const TB_TRANSFER_PENDING) :: TransferFlags
+pattern TRANSFER_POST_PENDING_TRANSFER = (#const TB_TRANSFER_POST_PENDING_TRANSFER) :: TransferFlags
+pattern TRANSFER_VOID_PENDING_TRANSFER = (#const TB_TRANSFER_VOID_PENDING_TRANSFER) :: TransferFlags
+pattern TRANSFER_BALANCING_DEBIT = (#const TB_TRANSFER_BALANCING_DEBIT) :: TransferFlags
+pattern TRANSFER_BALANCING_CREDIT = (#const TB_TRANSFER_BALANCING_CREDIT) :: TransferFlags
+
+{-# complete TRANSFER_LINKED, TRANSFER_PENDING, TRANSFER_POST_PENDING_TRANSFER, TRANSFER_VOID_PENDING_TRANSFER, TRANSFER_BALANCING_DEBIT, TRANSFER_BALANCING_CREDIT #-}
+
+data Transfer = Transfer
+  { id :: {-# UNPACK #-} !Word128,
+    debit_account_id :: {-# UNPACK #-} !Word128,
+    credit_account_id :: {-# UNPACK #-} !Word128,
+    amount :: {-# UNPACK #-} !Word128,
+    pending_id :: {-# UNPACK #-} !Word128,
+    user_data_128 :: {-# UNPACK #-} !Word128,
+    user_data_64 :: {-# UNPACK #-} !Word64,
+    user_data_32 :: {-# UNPACK #-} !Word32,
+    timeout :: {-# UNPACK #-} !Word32,
+    ledger :: {-# UNPACK #-} !Word32,
+    code :: {-# UNPACK #-} !Word16,
+    flags :: {-# UNPACK #-} !TransferFlags,
+    timestamp :: {-# UNPACK #-} !Word64
+  }
   deriving (Show, Read, Eq, Ord)
 
-instance Enum State where
-  fromEnum Success = (#const DuckDBSuccess)
-  fromEnum Error = (#const DuckDBError)
+instance Storable Transfer where
+  sizeOf _ = (#size tb_transfer_t)
+  alignment _ = (#alignment tb_transfer_t)
+  peek ptr = do
+    id <- (#peek tb_transfer_t, id) ptr
+    debit_account_id <- (#peek tb_transfer_t, debit_account_id) ptr
+    credit_account_id <- (#peek tb_transfer_t, credit_account_id) ptr
+    amount <- (#peek tb_transfer_t, amount) ptr
+    pending_id <- (#peek tb_transfer_t, pending_id) ptr
+    user_data_128 <- (#peek tb_transfer_t, user_data_128) ptr
+    user_data_64 <- (#peek tb_transfer_t, user_data_64) ptr
+    user_data_32 <- (#peek tb_transfer_t, user_data_32) ptr
+    timeout <- (#peek tb_transfer_t, timeout) ptr
+    ledger <- (#peek tb_transfer_t, ledger) ptr
+    code <- (#peek tb_transfer_t, code) ptr
+    flags <- (#peek tb_transfer_t, flags) ptr
+    timestamp <- (#peek tb_transfer_t, timestamp) ptr
+    return Transfer {..}
+  poke ptr Transfer {..} = do
+    (#poke tb_transfer_t, id) ptr id
+    (#poke tb_transfer_t, debit_account_id) ptr debit_account_id
+    (#poke tb_transfer_t, credit_account_id) ptr credit_account_id
+    (#poke tb_transfer_t, amount) ptr amount
+    (#poke tb_transfer_t, pending_id) ptr pending_id
+    (#poke tb_transfer_t, user_data_128) ptr user_data_128
+    (#poke tb_transfer_t, user_data_64) ptr user_data_64
+    (#poke tb_transfer_t, user_data_32) ptr user_data_32
+    (#poke tb_transfer_t, timeout) ptr timeout
+    (#poke tb_transfer_t, ledger) ptr ledger
+    (#poke tb_transfer_t, code) ptr code
+    (#poke tb_transfer_t, flags) ptr flags
+    (#poke tb_transfer_t, timestamp) ptr timestamp
 
-  toEnum (#const DuckDBSuccess) = Success
-  toEnum (#const DuckDBError) = Error
-  toEnum e = errorWithoutStackTrace ("invalid enum for State: " ++ show e)
-
-fromCState :: CState -> State
-fromCState = toEnum . fromIntegral . unCState 
-
-newtype CDbType = CDbType { unCDbType :: CInt }
-  deriving (Show, Eq)
-
-data DbType
-  = Invalid
-  | Boolean       -- bool
-  | TinyInt       -- int8_t
-  | SmallInt      -- int16_t
-  | Integer       -- int32_t
-  | BigInt        -- int64_t
-  | UTinyInt      -- uint8_t
-  | USmallInt     -- uint16_t
-  | UInteger      -- uint32_t
-  | UBigInt       -- uint64_t
-  | Float         -- float
-  | Double        -- double
-  | Timestamp     -- duckdb_timestamp, in microseconds
-  | Date          -- duckdb_date
-  | Time          -- duckdb_time
-  | Interval      -- duckdb_interval
-  | HugeInt       -- duckdb_hugeint
-  | VarChar       -- const char*
-  | Blob          -- duckdb_blob
-  | Decimal       -- decimal
-  | TimestampS    -- duckdb_timestamp, in seconds
-  | TimestampMS   -- duckdb_timestamp, in milliseconds
-  | TimestampNS   -- duckdb_timestamp, in nanoseconds
-  | Enum          -- enum type, only useful as logical type
-  | List          -- list type, only useful as logical type
-  | Struct        -- struct type, only useful as logical type
-  | Map           -- map type, only useful as logical type
-  | Uuid          -- duckdb_hugeint
-  | Json          -- const char*
-  deriving (Show, Read, Eq, Ord)
-
-instance Enum DbType where
-  fromEnum Invalid = (#const DUCKDB_TYPE_INVALID)
-  fromEnum Boolean = (#const DUCKDB_TYPE_BOOLEAN)
-  fromEnum TinyInt = (#const DUCKDB_TYPE_TINYINT)
-  fromEnum SmallInt = (#const DUCKDB_TYPE_SMALLINT)
-  fromEnum Integer = (#const DUCKDB_TYPE_INTEGER)
-  fromEnum BigInt = (#const DUCKDB_TYPE_BIGINT)
-  fromEnum UTinyInt = (#const DUCKDB_TYPE_UTINYINT)
-  fromEnum USmallInt = (#const DUCKDB_TYPE_USMALLINT)
-  fromEnum UInteger = (#const DUCKDB_TYPE_UINTEGER)
-  fromEnum UBigInt = (#const DUCKDB_TYPE_UBIGINT)
-  fromEnum Float = (#const DUCKDB_TYPE_FLOAT)
-  fromEnum Double = (#const DUCKDB_TYPE_DOUBLE)
-  fromEnum Timestamp = (#const DUCKDB_TYPE_TIMESTAMP)
-  fromEnum Date = (#const DUCKDB_TYPE_DATE)
-  fromEnum Time = (#const DUCKDB_TYPE_TIME)
-  fromEnum Interval = (#const DUCKDB_TYPE_INTERVAL)
-  fromEnum HugeInt = (#const DUCKDB_TYPE_HUGEINT)
-  fromEnum VarChar = (#const DUCKDB_TYPE_VARCHAR)
-  fromEnum Blob = (#const DUCKDB_TYPE_BLOB)
-  fromEnum Decimal = (#const DUCKDB_TYPE_DECIMAL)
-  fromEnum TimestampS = (#const DUCKDB_TYPE_TIMESTAMP_S)
-  fromEnum TimestampMS = (#const DUCKDB_TYPE_TIMESTAMP_MS)
-  fromEnum TimestampNS = (#const DUCKDB_TYPE_TIMESTAMP_NS)
-  fromEnum Enum = (#const DUCKDB_TYPE_ENUM)
-  fromEnum List = (#const DUCKDB_TYPE_LIST)
-  fromEnum Struct = (#const DUCKDB_TYPE_STRUCT)
-  fromEnum Map = (#const DUCKDB_TYPE_MAP)
-  fromEnum Uuid = (#const DUCKDB_TYPE_UUID)
-  fromEnum Json = (#const DUCKDB_TYPE_JSON)
-
-  toEnum (#const DUCKDB_TYPE_INVALID) = Invalid
-  toEnum (#const DUCKDB_TYPE_BOOLEAN) = Boolean
-  toEnum (#const DUCKDB_TYPE_TINYINT) = TinyInt
-  toEnum (#const DUCKDB_TYPE_SMALLINT) = SmallInt
-  toEnum (#const DUCKDB_TYPE_INTEGER) = Integer
-  toEnum (#const DUCKDB_TYPE_BIGINT) = BigInt
-  toEnum (#const DUCKDB_TYPE_UTINYINT) = UTinyInt
-  toEnum (#const DUCKDB_TYPE_USMALLINT) = USmallInt
-  toEnum (#const DUCKDB_TYPE_UINTEGER) = UInteger
-  toEnum (#const DUCKDB_TYPE_UBIGINT) = UBigInt
-  toEnum (#const DUCKDB_TYPE_FLOAT) = Float
-  toEnum (#const DUCKDB_TYPE_DOUBLE) = Double
-  toEnum (#const DUCKDB_TYPE_TIMESTAMP) = Timestamp
-  toEnum (#const DUCKDB_TYPE_DATE) = Date
-  toEnum (#const DUCKDB_TYPE_TIME) = Time
-  toEnum (#const DUCKDB_TYPE_INTERVAL) = Interval
-  toEnum (#const DUCKDB_TYPE_HUGEINT) = HugeInt
-  toEnum (#const DUCKDB_TYPE_VARCHAR) = VarChar
-  toEnum (#const DUCKDB_TYPE_BLOB) = Blob
-  toEnum (#const DUCKDB_TYPE_DECIMAL) = Decimal
-  toEnum (#const DUCKDB_TYPE_TIMESTAMP_S) = TimestampS
-  toEnum (#const DUCKDB_TYPE_TIMESTAMP_MS) = TimestampMS
-  toEnum (#const DUCKDB_TYPE_TIMESTAMP_NS) = TimestampNS
-  toEnum (#const DUCKDB_TYPE_ENUM) = Enum
-  toEnum (#const DUCKDB_TYPE_LIST) = List
-  toEnum (#const DUCKDB_TYPE_STRUCT) = Struct
-  toEnum (#const DUCKDB_TYPE_MAP) = Map
-  toEnum (#const DUCKDB_TYPE_UUID) = Uuid
-  toEnum (#const DUCKDB_TYPE_JSON) = Json
-  toEnum e = errorWithoutStackTrace ("invalid enum for DbType: " ++ show e)
-
-fromCDbType :: CDbType -> DbType
-fromCDbType = toEnum . fromIntegral . unCDbType 
-
-sizeOfDbType :: DbType -> CSize
-sizeOfDbType Invalid = 0
-sizeOfDbType Boolean = (#size bool)
-sizeOfDbType TinyInt = (#size int8_t)
-sizeOfDbType SmallInt = (#size int16_t)
-sizeOfDbType Integer = (#size int32_t)
-sizeOfDbType BigInt = (#size int64_t)
-sizeOfDbType UTinyInt = (#size uint8_t)
-sizeOfDbType USmallInt = (#size uint16_t)
-sizeOfDbType UInteger = (#size uint32_t)
-sizeOfDbType UBigInt = (#size uint64_t)
-sizeOfDbType Float = (#size float)
-sizeOfDbType Double = (#size double)
-sizeOfDbType Timestamp = (#size duckdb_timestamp)
-sizeOfDbType Date = (#size duckdb_date)
-sizeOfDbType Time = (#size duckdb_time)
-sizeOfDbType Interval = (#size duckdb_interval)
-sizeOfDbType HugeInt = (#size duckdb_hugeint)
-sizeOfDbType VarChar = (#size const char*)
-sizeOfDbType Blob = (#size duckdb_blob)
-sizeOfDbType Decimal = (#size duckdb_decimal)
-sizeOfDbType TimestampS = (#size duckdb_timestamp)
-sizeOfDbType TimestampMS = (#size duckdb_timestamp)
-sizeOfDbType TimestampNS = (#size duckdb_timestamp)
-sizeOfDbType Enum = 0
-sizeOfDbType List = 0
-sizeOfDbType Struct = 0
-sizeOfDbType Map = 0
-sizeOfDbType Uuid = (#size duckdb_hugeint)
-sizeOfDbType Json = 0
-
-duckdbCtx :: Context
-duckdbCtx = baseCtx <> ctx
+tigerbeetleCtx :: Context
+tigerbeetleCtx = baseCtx <> ctx
  where
   ctx =
     mempty
-      { ctxTypesTable = duckdbTypesTable
+      { ctxTypesTable = tigerbeetleTypesTable
       }
 
-duckdbTypesTable :: TypesTable
-duckdbTypesTable =
+tigerbeetleTypesTable :: TypesTable
+tigerbeetleTypesTable =
   Map.fromList
-    [ (C.TypeName "duckdb_state", [t| CState |])
-    , (C.TypeName "duckdb_database", [t| Ptr Database |])
-    , (C.TypeName "duckdb_connection", [t| Ptr Connection |])
-    , (C.TypeName "duckdb_result", [t| Result |])
-    , (C.TypeName "duckdb_data_chunk", [t| Ptr Chunk |])
-    , (C.TypeName "duckdb_vector", [t| Ptr Vector |])
-    , (C.TypeName "duckdb_logical_type", [t| Ptr LogicalType |])
-    , (C.TypeName "duckdb_type", [t| CDbType |])
-    , (C.TypeName "duckdb_String", [t| DString |])
-    , (C.TypeName "idx_t", [t| CULong |])
+    [ (C.TypeName "tb_account_t", [t| Account |])
     ]

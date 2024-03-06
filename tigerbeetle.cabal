@@ -29,14 +29,16 @@ library
     , base
     , containers
     , inline-c
+    , primitive
     , resourcet
     , streamly
     , template-haskell
     , text
     , transformers
     , vector
+    , wide-word
 
-  extra-libraries:  tigerbeetle
+  extra-libraries:  tb_client
   exposed-modules:
     TigerBeetle
     TigerBeetle.Error
