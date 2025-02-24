@@ -63,7 +63,6 @@
               export ZIG_GLOBAL_CACHE_DIR
               zig build --release -Dgit-commit=${tigerbeetleSrc.rev} clients:c
             '';
-            # zig build -Drelease=true -Dcpu=baseline -Dgit-commit=${tigerbeetleSrc.rev} -Dversion=${tigerbeetleSrc.rev} clients_c
             installPhase = ''
               mkdir -p $out/lib $out/include
               cp src/clients/c/lib/x86_64-linux-gnu*/* $out/lib
