@@ -2,17 +2,17 @@
   "nodes": {
     "nixpkgs": {
       "locked": {
-        "lastModified": 1709109959,
-        "narHash": "sha256-xjEGAZH+ITX+D8ww58mGDS4dglIgoAnuvwTc0yH+wKs=",
-        "ref": "refs/heads/haskell-updates",
-        "rev": "f82850337a0b235f095afcdd86a1009d0dcc4a3f",
-        "revCount": 589620,
-        "type": "git",
-        "url": "file:///home/shaun/nixpkgs"
+        "lastModified": 1740400550,
+        "narHash": "sha256-CYmNXP+oPMjgNugIR+QXX1sxikiBs/vtDJVh832rITs=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "b8af00342ca96dcd21f6554b689f05e90ed6b894",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "file:///home/shaun/nixpkgs"
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "type": "github"
       }
     },
     "root": {
@@ -24,11 +24,11 @@
     "tigerbeetleSrc": {
       "flake": false,
       "locked": {
-        "lastModified": 1709107638,
-        "narHash": "sha256-Vt1Fe0q/vSGTRuOXkN38Pb3jiRrPFp9QQ/sJlwHxzJA=",
+        "lastModified": 1740182148,
+        "narHash": "sha256-792/eR9JvrwZEOdWDsZz5oUub9XXQ1oWV1IEyilui24=",
         "owner": "tigerbeetle",
         "repo": "tigerbeetle",
-        "rev": "6defd9d8a73944934a9d01c774f170c7416bfb4a",
+        "rev": "9721f287401a899aa1e46bae78f437c48b521c73",
         "type": "github"
       },
       "original": {
