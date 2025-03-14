@@ -3,8 +3,6 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
-    # nixpkgs.url = "/home/shaun/nixpkgs";
-
     tigerbeetleSrc.url = "github:tigerbeetle/tigerbeetle";
     tigerbeetleSrc.flake = false;
   };
@@ -35,11 +33,9 @@
           lib = pkgs.lib;
         in
         with pkgs.haskell.lib;
-        pkgs.haskell.packages.ghc96.override {
+        pkgs.haskell.packages.ghc98.override {
           overrides = self: super: {
             haskell-language-server = dontCheck super.haskell-language-server;
-            hls-semantic-tokens-plugin = dontCheck super.hls-semantic-tokens-plugin;
-            ghcide = dontCheck super.ghcide;
           };
         };
     in
@@ -55,7 +51,7 @@
             name = "tb_client";
             src = tigerbeetleSrc;
             nativeBuildInputs = with pkgs; [
-              zig
+              zig_0_13
               git
             ];
             buildPhase = ''
@@ -65,8 +61,9 @@
             '';
             installPhase = ''
               mkdir -p $out/lib $out/include
-              cp src/clients/c/lib/x86_64-linux-gnu*/* $out/lib
               cp src/clients/c/tb_client.h $out/include
+              cp src/clients/c/lib/x86_64-linux-gnu*/* $out/lib
+              patchelf --add-needed libm.so.6 $out/lib/libtb_client.so
             '';
           };
           tigerbeetle = haskellPackages.callCabal2nix "tigerbeetle" ./. {
@@ -95,3 +92,4 @@
       );
     };
 }
+
