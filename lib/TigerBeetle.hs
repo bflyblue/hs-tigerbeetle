@@ -25,8 +25,8 @@ newClient clusterId address = do
 
 destroyClient :: C.Client -> IO ()
 destroyClient client = do
-  free (C.cPacketPtr client)
   C.clientDeinit (C.cClient client)
+  free (C.cPacketPtr client)
 
 withClient :: Integer -> ByteString -> (C.Client -> IO a) -> IO a
 withClient clusterId address =

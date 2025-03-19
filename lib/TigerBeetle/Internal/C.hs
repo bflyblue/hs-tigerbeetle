@@ -77,11 +77,11 @@ clientInit' clusterId address ctx callbackPtr = do
 
 clientDeinit :: I.Client -> IO ()
 clientDeinit client = do
-  alloca $ \ctxPtrPtr -> do
+  ctxPtr <- alloca $ \ctxPtrPtr -> do
     clientStatus <- [C.exp| TB_CLIENT_STATUS { tb_client_completion_context($(tb_client_t * client), $(uintptr_t * ctxPtrPtr)) } |]
-    ctxPtr <- peek ctxPtrPtr
-    freeStablePtr (castPtrToStablePtr $ cuintPtrToPtr ctxPtr)
+    peek ctxPtrPtr
   [C.exp| void { tb_client_deinit($(tb_client_t * client)) } |]
+  freeStablePtr (castPtrToStablePtr $ cuintPtrToPtr ctxPtr)
   free client
 
 ptrToCUIntPtr :: Ptr a -> CUIntPtr
