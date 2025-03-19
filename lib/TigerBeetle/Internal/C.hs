@@ -4,6 +4,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -15,9 +16,10 @@ import Data.WideWord
 import Foreign
 import Foreign.C
 import GHC.ByteOrder
-import qualified Language.C.Inline as C
-import qualified TigerBeetle.Internal.Client as Client
-import qualified TigerBeetle.Internal.Context as Ctx
+import Language.C.Inline qualified as C
+import TigerBeetle.Internal.Client qualified as Client
+import TigerBeetle.Internal.Context qualified as Ctx
+import TigerBeetle.Internal.Packet qualified as P
 
 C.context (C.baseCtx <> C.bsCtx <> C.funCtx <> Ctx.tigerbeetleCtx)
 C.include "<tb_client.h>"
@@ -75,8 +77,11 @@ clientInit clusterId address = do
       pure (Left s)
 
 callback :: MVar () -> CUIntPtr -> Ptr Client.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()
-callback mbox ctxIntPtr packetPtr timestamp dataPtr size = do
+callback mbox _ctxIntPtr packetPtr timestamp dataPtr size = do
+  packet <- peek packetPtr
+  print (dataPtr, size)
   putMVar mbox ()
+  P.freePacketData packet
 
 clientDeinit :: Client -> IO ()
 clientDeinit Client{cClient, cPacketPtr} = do

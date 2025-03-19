@@ -1,12 +1,25 @@
-module TigerBeetle where
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StrictData #-}
 
-import Control.Concurrent
-import Control.Exception
-import Data.ByteString
-import Data.Coerce (coerce)
-import Foreign
-import qualified TigerBeetle.Internal.C as C
-import qualified TigerBeetle.Internal.Client as I
+module TigerBeetle (
+  C.Client (..),
+  I.Account (..),
+  I.InitStatus (..),
+  I.ClientStatus (..),
+  I.Operation (..),
+  I.Packet (..),
+  newClient,
+  destroyClient,
+  withClient,
+  createAccounts,
+) where
+
+import Control.Concurrent (takeMVar)
+import Control.Exception (Exception, bracket, throwIO)
+import Data.ByteString (ByteString)
+import TigerBeetle.Internal.C qualified as C
+import TigerBeetle.Internal.Client qualified as I
+import TigerBeetle.Internal.Packet qualified as P
 
 data TigerBeetleError
   = TBInitError I.InitStatus
@@ -35,23 +48,12 @@ sendRequest :: C.Client -> I.Packet -> IO I.ClientStatus
 sendRequest client packet = do
   C.sendRequest client packet
 
-pulse :: C.Client -> IO ()
-pulse client = do
-  datPtr <- mallocBytes 1024
-  userPtr <- mallocBytes 1024
-
-  let packet =
-        I.Packet
-          { I.user_data = userPtr
-          , I.data_ptr = datPtr
-          , I.data_size = 1024
-          , I.user_tag = 0
-          , I.operation = coerce I.OPERATION_PULSE
-          , I.status = coerce I.PACKET_OK
-          }
+createAccounts :: C.Client -> [I.Account] -> IO ()
+createAccounts client accounts = do
+  packet <- P.newPacketData I.OPERATION_CREATE_ACCOUNTS accounts
   status <- sendRequest client packet
   case status of
     I.CLIENT_OK -> waitCallback
-    _ -> throwIO (TBClientError status)
+    I.CLIENT_INVALID -> throwIO (TBClientError status)
  where
   waitCallback = takeMVar (C.cMailbox client)

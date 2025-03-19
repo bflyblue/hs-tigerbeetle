@@ -12,7 +12,6 @@
 module TigerBeetle.Internal.Client where
 
 import Data.Bits
-import qualified Data.Map as Map
 import Data.Primitive.Types
 import Data.WideWord
 import Data.Word
@@ -20,8 +19,6 @@ import Foreign.C.Types
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
-import Language.C.Inline.Context
-import qualified Language.C.Types as C
 import Prelude hiding (id)
 
 #include <tb_client.h>
