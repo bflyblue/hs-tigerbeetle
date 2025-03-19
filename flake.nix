@@ -3,8 +3,13 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
-    tigerbeetleSrc.url = "github:tigerbeetle/tigerbeetle";
-    tigerbeetleSrc.flake = false;
+    tigerbeetleSrc = {
+      type = "github";
+      owner = "tigerbeetle";
+      repo = "tigerbeetle";
+      ref = "0.16.30";
+      flake = false;
+    };
   };
 
   outputs =
@@ -50,6 +55,7 @@
           tb_client = pkgs.stdenv.mkDerivation {
             name = "tb_client";
             src = tigerbeetleSrc;
+            version = tigerbeetleSrc.rev;
             nativeBuildInputs = with pkgs; [
               zig_0_13
               git
@@ -57,7 +63,8 @@
             buildPhase = ''
               ZIG_GLOBAL_CACHE_DIR=$(mktemp -d)
               export ZIG_GLOBAL_CACHE_DIR
-              zig build --release -Dgit-commit=${tigerbeetleSrc.rev} clients:c
+              version=$(grep -m 1 "^## TigerBeetle" CHANGELOG.md | sed 's/^## TigerBeetle \([0-9.]*\).*/\1/')
+              zig build --release -Dgit-commit=${tigerbeetleSrc.rev} -Dconfig-release-client-min=$version -Dconfig-release=$version clients:c
             '';
             installPhase = ''
               mkdir -p $out/lib $out/include
@@ -86,6 +93,16 @@
               haskell-language-server
             ];
             withHoogle = true;
+            
+            # Add library paths for HLS
+            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ 
+              self.packages.${system}.tb_client
+            ];
+            
+            # Optional shellHook for additional setup
+            shellHook = ''
+              export NIX_LDFLAGS="-L${self.packages.${system}.tb_client}/lib $NIX_LDFLAGS"
+            '';
           };
           default = self.devShells.${system}.tigerbeetle;
         }

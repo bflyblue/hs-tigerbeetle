@@ -17,16 +17,13 @@ instance Exception TigerBeetleError
 
 newClient :: Integer -> ByteString -> IO C.Client
 newClient clusterId address = do
-  completionCallback <- C.mkCallback onCompletion
-  result <- C.clientInit (fromInteger clusterId) address completionCallback
+  result <- C.clientInit (fromInteger clusterId) address
   case result of
     Left status -> throwIO (TBInitError status)
     Right client -> pure client
 
 destroyClient :: C.Client -> IO ()
-destroyClient client = do
-  C.clientDeinit (C.cClient client)
-  free (C.cPacketPtr client)
+destroyClient = C.clientDeinit
 
 withClient :: Integer -> ByteString -> (C.Client -> IO a) -> IO a
 withClient clusterId address =
@@ -34,15 +31,9 @@ withClient clusterId address =
     (newClient clusterId address)
     destroyClient
 
-onCompletion :: MVar () -> Ptr I.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()
-onCompletion mbox packetPtr timestamp dat size = do
-  putStrLn "onCompletion"
-  putMVar mbox ()
-
 sendRequest :: C.Client -> I.Packet -> IO I.ClientStatus
 sendRequest client packet = do
-  poke (C.cPacketPtr client) packet
-  C.sendRequest (C.cClient client) (C.cPacketPtr client)
+  C.sendRequest client packet
 
 pulse :: C.Client -> IO ()
 pulse client = do

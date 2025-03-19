@@ -41,6 +41,7 @@ library
     TigerBeetle.Error
     TigerBeetle.Internal.C
     TigerBeetle.Internal.Client
+    TigerBeetle.Internal.Context
 
 executable tigerbeetle
   main-is:          Main.hs

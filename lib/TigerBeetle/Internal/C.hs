@@ -1,6 +1,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -15,74 +16,95 @@ import Foreign
 import Foreign.C
 import GHC.ByteOrder
 import qualified Language.C.Inline as C
-import qualified TigerBeetle.Internal.Client as I
+import qualified TigerBeetle.Internal.Client as Client
+import qualified TigerBeetle.Internal.Context as Ctx
 
-C.context (C.baseCtx <> C.bsCtx <> C.funCtx <> I.tigerbeetleCtx)
+C.context (C.baseCtx <> C.bsCtx <> C.funCtx <> Ctx.tigerbeetleCtx)
 C.include "<tb_client.h>"
 
-data Callback a = Callback
-  { cbFunction :: a -> Ptr I.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()
-  , cbPtr :: FunPtr (CUIntPtr -> Ptr I.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ())
-  }
-
 data Client = Client
-  { cClient :: I.Client
-  , cCallback :: Callback (MVar ())
-  , cPacketPtr :: Ptr I.Packet
+  { cClient :: Client.Client
+  -- ^ The underlying C client
+  , cCallbackFunPtr :: FunPtr (CUIntPtr -> Ptr Client.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ())
+  -- ^ Pointer to the callback function
   , cMailbox :: MVar ()
+  -- ^ The mailbox to communicate with the callback
+  , cPacketPtr :: Ptr Client.Packet
+  -- ^ Pointer to memory allocated to store the packet
   }
 
-mkCallback :: (a -> Ptr I.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()) -> IO (Callback a)
-mkCallback callback = do
-  callbackPtr <- [C.exp| void (*callback)(uintptr_t, tb_packet_t *, uint64_t, uint8_t *, uint32_t) { $fun-alloc:(void (*wrapped)(uintptr_t, tb_packet_t *, uint64_t, uint8_t *, uint32_t)) } |]
-  pure Callback{cbFunction = callback, cbPtr = callbackPtr}
- where
-  wrapped :: CUIntPtr -> Ptr I.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()
-  wrapped ctxPtr packet timestamp dat size = do
-    putStrLn "wrapped"
-    ctx <- deRefStablePtr (castPtrToStablePtr $ cuintPtrToPtr ctxPtr)
-    callback ctx packet timestamp dat size
+clientInit :: Word128 -> ByteString -> IO (Either Client.InitStatus Client)
+clientInit clusterId address = do
+  -- Allocate space to store the opaque client handle
+  cClient <- calloc @Client.TBClient
 
-word128le :: Word128 -> Word128
-word128le = case targetByteOrder of
-  LittleEndian -> id
-  BigEndian -> byteSwapWord128
+  -- For now, we don't need a context, so we can pass nullPtr
+  let ctx = ptrToCUIntPtr nullPtr
 
-clientInit :: Word128 -> ByteString -> Callback (MVar ()) -> IO (Either I.InitStatus Client)
-clientInit clusterId address callback = do
-  mbox <- newEmptyMVar
-  ctxPtr <- newStablePtr mbox
-  result <- clientInit' clusterId address (ptrToCUIntPtr $ castStablePtrToPtr ctxPtr) (cbPtr callback)
-  case result of
-    Left status -> do
-      freeStablePtr ctxPtr
-      pure (Left status)
-    Right client -> do
-      packetPtr <- malloc
-      pure (Right Client{cClient = client, cCallback = callback, cPacketPtr = packetPtr, cMailbox = mbox})
+  -- Create a mailbox to communicate with the callback
+  cMailbox <- newEmptyMVar
 
-clientInit' :: Word128 -> ByteString -> CUIntPtr -> FunPtr (CUIntPtr -> Ptr I.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()) -> IO (Either I.InitStatus I.Client)
-clientInit' clusterId address ctx callbackPtr = do
-  client <- calloc @I.TBClient
-  with (word128le clusterId) $ \clusterIdPtr -> do
+  -- Create a callback function that puts a message in the mailbox
+  cCallbackFunPtr <- mkCallback (callback cMailbox)
+
+  -- Allocate space to store the packet
+  cPacketPtr <- malloc @Client.Packet
+
+  -- Initialize the client
+  initStatus <- with (word128le clusterId) $ \clusterIdPtr -> do
     let clusterIdPtr' = castPtr clusterIdPtr
-    initStatus <-
-      [C.exp| TB_INIT_STATUS { tb_client_init($(tb_client_t * client), $(uint8_t * clusterIdPtr'), $bs-ptr:address, $bs-len:address, $(uintptr_t ctx), $(void (*callbackPtr)(uintptr_t, tb_packet_t *, uint64_t, const uint8_t *, uint32_t))) } |]
-    case initStatus of
-      I.INIT_SUCCESS -> pure (Right client)
-      s -> do
-        free client
-        freeHaskellFunPtr callbackPtr
-        pure (Left s)
+    [C.exp| TB_INIT_STATUS {
+      tb_client_init(
+        $(tb_client_t * cClient),
+        $(uint8_t * clusterIdPtr'),
+        $bs-ptr:address,
+        $bs-len:address,
+        $(uintptr_t ctx),
+        $(void (*cCallbackFunPtr)(uintptr_t, tb_packet_t *, uint64_t, const uint8_t *, uint32_t))
+      )
+    } |]
 
-clientDeinit :: I.Client -> IO ()
-clientDeinit client = do
-  ctxPtr <- alloca $ \ctxPtrPtr -> do
-    clientStatus <- [C.exp| TB_CLIENT_STATUS { tb_client_completion_context($(tb_client_t * client), $(uintptr_t * ctxPtrPtr)) } |]
-    peek ctxPtrPtr
-  [C.exp| void { tb_client_deinit($(tb_client_t * client)) } |]
-  freeStablePtr (castPtrToStablePtr $ cuintPtrToPtr ctxPtr)
-  free client
+  case initStatus of
+    Client.INIT_SUCCESS ->
+      -- If the client was initialized successfully, return it
+      pure (Right Client{cClient, cCallbackFunPtr, cMailbox, cPacketPtr})
+    s -> do
+      -- Otherwise, free the client and return the error
+      free cClient
+      freeHaskellFunPtr cCallbackFunPtr
+      pure (Left s)
+
+callback :: MVar () -> CUIntPtr -> Ptr Client.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()
+callback mbox ctxIntPtr packetPtr timestamp dataPtr size = do
+  putMVar mbox ()
+
+clientDeinit :: Client -> IO ()
+clientDeinit Client{cClient, cPacketPtr} = do
+  free cPacketPtr
+  [C.exp| void { tb_client_deinit($(tb_client_t * cClient)) } |]
+  free cClient
+
+clientCompletionContext :: Client -> IO (Either Client.ClientStatus CUIntPtr)
+clientCompletionContext Client{cClient} = do
+  alloca $ \ctxPtrPtr -> do
+    clientStatus <- [C.exp| TB_CLIENT_STATUS { tb_client_completion_context($(tb_client_t * cClient), $(uintptr_t * ctxPtrPtr)) } |]
+    case clientStatus of
+      Client.CLIENT_OK ->
+        Right <$> peek ctxPtrPtr
+      s -> pure (Left s)
+
+sendRequest :: Client -> Client.Packet -> IO Client.ClientStatus
+sendRequest Client{cClient, cPacketPtr} packet = do
+  poke cPacketPtr packet
+  [C.block| TB_CLIENT_STATUS { tb_client_submit($(tb_client_t * cClient), $(tb_packet_t * cPacketPtr)); } |]
+
+-- * Callbacks
+
+type Callback = CUIntPtr -> Ptr Client.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()
+
+foreign import ccall "wrapper" mkCallback :: Callback -> IO (FunPtr Callback)
+
+-- * Utility functions
 
 ptrToCUIntPtr :: Ptr a -> CUIntPtr
 ptrToCUIntPtr ptr =
@@ -96,6 +118,7 @@ cuintPtrToPtr cuintptr =
     Just ptr -> wordPtrToPtr ptr
     Nothing -> error "Pointer conversion failed due to size mismatch"
 
-sendRequest :: I.Client -> Ptr I.Packet -> IO I.ClientStatus
-sendRequest client packet = do
-  [C.block| TB_CLIENT_STATUS { tb_client_submit($(tb_client_t * client), $(tb_packet_t * packet)); } |]
+word128le :: Word128 -> Word128
+word128le = case targetByteOrder of
+  LittleEndian -> id
+  BigEndian -> byteSwapWord128
