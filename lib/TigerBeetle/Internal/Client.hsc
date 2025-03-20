@@ -17,6 +17,7 @@ import Data.WideWord
 import Data.Word
 import Foreign.C.Types
 import Foreign.Marshal.Array
+import Foreign.Marshal.Utils
 import Foreign.Ptr
 import Foreign.Storable
 import Prelude hiding (id)
@@ -295,7 +296,7 @@ data AccountFilter = AccountFilter
     timestamp_min :: {-# UNPACK #-} !Word64,
     timestamp_max :: {-# UNPACK #-} !Word64,
     limit :: {-# UNPACK #-} !Word32,
-    flags :: {-# UNPACK #-} !Word32
+    flags :: {-# UNPACK #-} !AccountFilterFlags
   }
   deriving (Show, Read, Eq, Ord)
 
@@ -319,7 +320,7 @@ instance Storable AccountFilter where
     (#poke tb_account_filter_t, user_data_64) ptr user_data_64
     (#poke tb_account_filter_t, user_data_32) ptr user_data_32
     (#poke tb_account_filter_t, code) ptr code
-    pokeArray (ptr `plusPtr` (#offset tb_account_filter_t, reserved)) (replicate 58 (0 :: Word8))
+    fillBytes (ptr `plusPtr` (#offset tb_account_filter_t, reserved)) 0 58
     (#poke tb_account_filter_t, timestamp_min) ptr timestamp_min
     (#poke tb_account_filter_t, timestamp_max) ptr timestamp_max
     (#poke tb_account_filter_t, limit) ptr limit
@@ -358,7 +359,7 @@ instance Storable AccountBalance where
     (#poke tb_account_balance_t, credits_pending) ptr credits_pending
     (#poke tb_account_balance_t, credits_posted) ptr credits_posted
     (#poke tb_account_balance_t, timestamp) ptr timestamp
-    pokeArray (ptr `plusPtr` (#offset tb_account_balance_t, reserved)) (replicate 56 (0 :: Word8))
+    fillBytes (ptr `plusPtr` (#offset tb_account_balance_t, reserved)) 0 56
 
 data QueryFilter = QueryFilter
   { user_data_128 :: {-# UNPACK #-} !Word128,
@@ -393,7 +394,7 @@ instance Storable QueryFilter where
     (#poke tb_query_filter_t, user_data_32) ptr user_data_32
     (#poke tb_query_filter_t, ledger) ptr ledger
     (#poke tb_query_filter_t, code) ptr code
-    pokeArray (ptr `plusPtr` (#offset tb_query_filter_t, reserved)) (replicate 6 (0 :: Word8))
+    fillBytes (ptr `plusPtr` (#offset tb_query_filter_t, reserved)) 0 6
     (#poke tb_query_filter_t, timestamp_min) ptr timestamp_min
     (#poke tb_query_filter_t, timestamp_max) ptr timestamp_max
     (#poke tb_query_filter_t, limit) ptr limit
