@@ -146,7 +146,7 @@ instance Storable Transfer where
     (#poke tb_transfer_t, flags) ptr flags
     (#poke tb_transfer_t, timestamp) ptr timestamp
 
-newtype CreateAccountResult = CreateAccountResult CInt deriving (Eq, Ord, Show, Read, Num, Enum, Real, Integral, Storable, Prim, Bits)
+newtype CreateAccountResult = CreateAccountResult Word32 deriving (Eq, Ord, Show, Read, Num, Enum, Real, Integral, Storable, Prim, Bits)
 
 pattern CREATE_ACCOUNT_OK = (#const TB_CREATE_ACCOUNT_OK) :: CreateAccountResult
 pattern CREATE_ACCOUNT_LINKED_EVENT_FAILED = (#const TB_CREATE_ACCOUNT_LINKED_EVENT_FAILED) :: CreateAccountResult
@@ -178,7 +178,7 @@ pattern CREATE_ACCOUNT_IMPORTED_EVENT_TIMESTAMP_MUST_NOT_REGRESS = (#const TB_CR
 
 {-# complete CREATE_ACCOUNT_OK, CREATE_ACCOUNT_LINKED_EVENT_FAILED, CREATE_ACCOUNT_LINKED_EVENT_CHAIN_OPEN, CREATE_ACCOUNT_IMPORTED_EVENT_EXPECTED, CREATE_ACCOUNT_IMPORTED_EVENT_NOT_EXPECTED, CREATE_ACCOUNT_TIMESTAMP_MUST_BE_ZERO, CREATE_ACCOUNT_IMPORTED_EVENT_TIMESTAMP_OUT_OF_RANGE, CREATE_ACCOUNT_IMPORTED_EVENT_TIMESTAMP_MUST_NOT_ADVANCE, CREATE_ACCOUNT_RESERVED_FIELD, CREATE_ACCOUNT_RESERVED_FLAG, CREATE_ACCOUNT_ID_MUST_NOT_BE_ZERO, CREATE_ACCOUNT_ID_MUST_NOT_BE_INT_MAX, CREATE_ACCOUNT_EXISTS_WITH_DIFFERENT_FLAGS, CREATE_ACCOUNT_EXISTS_WITH_DIFFERENT_USER_DATA_128, CREATE_ACCOUNT_EXISTS_WITH_DIFFERENT_USER_DATA_64, CREATE_ACCOUNT_EXISTS_WITH_DIFFERENT_USER_DATA_32, CREATE_ACCOUNT_EXISTS_WITH_DIFFERENT_LEDGER, CREATE_ACCOUNT_EXISTS_WITH_DIFFERENT_CODE, CREATE_ACCOUNT_EXISTS, CREATE_ACCOUNT_FLAGS_ARE_MUTUALLY_EXCLUSIVE, CREATE_ACCOUNT_DEBITS_PENDING_MUST_BE_ZERO, CREATE_ACCOUNT_DEBITS_POSTED_MUST_BE_ZERO, CREATE_ACCOUNT_CREDITS_PENDING_MUST_BE_ZERO, CREATE_ACCOUNT_CREDITS_POSTED_MUST_BE_ZERO, CREATE_ACCOUNT_LEDGER_MUST_NOT_BE_ZERO, CREATE_ACCOUNT_CODE_MUST_NOT_BE_ZERO, CREATE_ACCOUNT_IMPORTED_EVENT_TIMESTAMP_MUST_NOT_REGRESS #-}
 
-newtype CreateTransferResult = CreateTransferResult CInt deriving (Eq, Ord, Show, Read, Num, Enum, Real, Integral, Storable, Prim, Bits)
+newtype CreateTransferResult = CreateTransferResult Word32 deriving (Eq, Ord, Show, Read, Num, Enum, Real, Integral, Storable, Prim, Bits)
 
 pattern CREATE_TRANSFER_OK = (#const TB_CREATE_TRANSFER_OK) :: CreateTransferResult
 pattern CREATE_TRANSFER_LINKED_EVENT_FAILED = (#const TB_CREATE_TRANSFER_LINKED_EVENT_FAILED) :: CreateTransferResult
@@ -254,7 +254,7 @@ pattern CREATE_TRANSFER_EXCEEDS_DEBITS = (#const TB_CREATE_TRANSFER_EXCEEDS_DEBI
 
 data CreateAccountsResult = CreateAccountsResult
   { index :: {-# UNPACK #-} !Word32,
-    result :: {-# UNPACK #-} !Word32
+    result :: {-# UNPACK #-} !CreateAccountResult
   }
   deriving (Show, Read, Eq, Ord)
 
@@ -271,7 +271,7 @@ instance Storable CreateAccountsResult where
 
 data CreateTransfersResult = CreateTransfersResult
   { index :: {-# UNPACK #-} !Word32,
-    result :: {-# UNPACK #-} !Word32
+    result :: {-# UNPACK #-} !CreateTransferResult
   }
   deriving (Show, Read, Eq, Ord)
 

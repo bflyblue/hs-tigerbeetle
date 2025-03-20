@@ -14,9 +14,10 @@ module TigerBeetle (
   createAccounts,
 ) where
 
-import Control.Concurrent (takeMVar)
 import Control.Exception (Exception, bracket, throwIO)
+import Control.Monad (unless)
 import Data.ByteString (ByteString)
+import Data.Word (Word64)
 import TigerBeetle.Internal.C qualified as C
 import TigerBeetle.Internal.Client qualified as I
 import TigerBeetle.Internal.Packet qualified as P
@@ -24,6 +25,7 @@ import TigerBeetle.Internal.Packet qualified as P
 data TigerBeetleError
   = TBInitError I.InitStatus
   | TBClientError I.ClientStatus
+  | TBPacketError I.PacketStatus
   deriving (Show, Eq, Ord)
 
 instance Exception TigerBeetleError
@@ -44,16 +46,26 @@ withClient clusterId address =
     (newClient clusterId address)
     destroyClient
 
+fromCallback :: (P.PacketData a) => C.Client -> IO (Either I.PacketStatus (Word64, a))
+fromCallback client = do
+  (timestamp, msg) <- C.waitCallback client
+  print msg
+  case msg of
+    Left status -> throwIO (TBPacketError status)
+    Right somePacketData -> do
+      a <- P.castSomePacketData somePacketData
+      pure (Right (timestamp, a))
+
 sendRequest :: C.Client -> I.Packet -> IO I.ClientStatus
 sendRequest client packet = do
   C.sendRequest client packet
 
-createAccounts :: C.Client -> [I.Account] -> IO ()
+createAccounts :: C.Client -> [I.Account] -> IO [I.CreateAccountsResult]
 createAccounts client accounts = do
   packet <- P.newPacketData I.OPERATION_CREATE_ACCOUNTS accounts
-  status <- sendRequest client packet
-  case status of
-    I.CLIENT_OK -> waitCallback
-    I.CLIENT_INVALID -> throwIO (TBClientError status)
- where
-  waitCallback = takeMVar (C.cMailbox client)
+  clientStatus <- sendRequest client packet
+  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
+  cb <- fromCallback client
+  case cb of
+    Left status -> throwIO (TBPacketError status)
+    Right (_time, results) -> pure results

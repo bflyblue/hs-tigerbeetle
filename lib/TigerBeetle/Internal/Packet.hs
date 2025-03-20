@@ -1,10 +1,17 @@
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module TigerBeetle.Internal.Packet (
   PacketData (..),
+  SomePacketData (..),
+  castSomePacketData,
   newPacketData,
   freePacketData,
 ) where
 
 import Control.Monad (when)
+import Data.ByteString qualified as BS
+import Data.ByteString.Unsafe qualified as UBS
 import Data.Coerce (coerce)
 import Foreign
 import TigerBeetle.Internal.Client qualified as I
@@ -13,32 +20,23 @@ class PacketData a where
   toPacketData :: a -> IO (Ptr (), Word32)
   fromPacketData :: Ptr () -> Word32 -> IO a
 
-instance PacketData () where
-  toPacketData :: () -> IO (Ptr (), Word32)
-  toPacketData () = do
-    pure (nullPtr, 0)
-
-  fromPacketData :: Ptr () -> Word32 -> IO ()
-  fromPacketData _ptr _size =
-    pure ()
-
-instance PacketData I.Account where
-  toPacketData :: I.Account -> IO (Ptr (), Word32)
+instance {-# OVERLAPPABLE #-} (Storable a) => PacketData a where
+  toPacketData :: a -> IO (Ptr (), Word32)
   toPacketData x = do
+    let size = sizeOf @a undefined
     ptr <- malloc
     poke ptr x
-    pure (castPtr ptr, fromIntegral (sizeOf x))
+    pure (castPtr ptr, fromIntegral size)
 
-  fromPacketData :: Ptr () -> Word32 -> IO I.Account
+  fromPacketData :: Ptr () -> Word32 -> IO a
   fromPacketData ptr _size =
     peek (castPtr ptr)
 
-instance (PacketData a, Storable a) => PacketData [a] where
+instance {-# OVERLAPPING #-} (PacketData a, Storable a) => PacketData [a] where
   toPacketData :: [a] -> IO (Ptr (), Word32)
   toPacketData xs = do
-    let
-      len = length xs
-      size = len * sizeOf @a undefined
+    let len = length xs
+        size = len * sizeOf @a undefined
     ptr <- mallocArray len
     pokeArray ptr xs
     pure (castPtr ptr, fromIntegral size)
@@ -47,6 +45,23 @@ instance (PacketData a, Storable a) => PacketData [a] where
   fromPacketData ptr size = do
     let len = fromIntegral size `div` sizeOf @a undefined
     peekArray len (castPtr ptr)
+
+instance {-# OVERLAPPING #-} PacketData () where
+  toPacketData :: () -> IO (Ptr (), Word32)
+  toPacketData () = do
+    pure (nullPtr, 0)
+
+  fromPacketData :: Ptr () -> Word32 -> IO ()
+  fromPacketData _ptr _size =
+    pure ()
+
+newtype SomePacketData = SomePacketData BS.ByteString
+  deriving (Show, Eq, Ord)
+
+castSomePacketData :: (PacketData a) => SomePacketData -> IO a
+castSomePacketData (SomePacketData bs) =
+  UBS.unsafeUseAsCStringLen bs $
+    \(ptr, size) -> fromPacketData (castPtr ptr) (fromIntegral size)
 
 newPacketData :: (PacketData a) => I.Operation -> a -> IO I.Packet
 newPacketData op d = do

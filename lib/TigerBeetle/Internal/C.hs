@@ -11,7 +11,8 @@
 module TigerBeetle.Internal.C where
 
 import Control.Concurrent
-import Data.ByteString
+import Data.ByteString (ByteString)
+import Data.ByteString.Unsafe qualified as UBS
 import Data.WideWord
 import Foreign
 import Foreign.C
@@ -19,17 +20,22 @@ import GHC.ByteOrder
 import Language.C.Inline qualified as C
 import TigerBeetle.Internal.Client qualified as Client
 import TigerBeetle.Internal.Context qualified as Ctx
+import TigerBeetle.Internal.Packet (SomePacketData)
 import TigerBeetle.Internal.Packet qualified as P
 
 C.context (C.baseCtx <> C.bsCtx <> C.funCtx <> Ctx.tigerbeetleCtx)
 C.include "<tb_client.h>"
+
+type Mailbox = MVar CallbackMessage
+
+type CallbackMessage = (Word64, Either Client.PacketStatus SomePacketData)
 
 data Client = Client
   { cClient :: Client.Client
   -- ^ The underlying C client
   , cCallbackFunPtr :: FunPtr (CUIntPtr -> Ptr Client.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ())
   -- ^ Pointer to the callback function
-  , cMailbox :: MVar ()
+  , cMailbox :: Mailbox
   -- ^ The mailbox to communicate with the callback
   , cPacketPtr :: Ptr Client.Packet
   -- ^ Pointer to memory allocated to store the packet
@@ -76,12 +82,20 @@ clientInit clusterId address = do
       freeHaskellFunPtr cCallbackFunPtr
       pure (Left s)
 
-callback :: MVar () -> CUIntPtr -> Ptr Client.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()
+callback :: Mailbox -> CUIntPtr -> Ptr Client.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()
 callback mbox _ctxIntPtr packetPtr timestamp dataPtr size = do
   packet <- peek packetPtr
-  print (dataPtr, size)
-  putMVar mbox ()
-  P.freePacketData packet
+  let status = toEnum (fromIntegral (Client.status packet))
+  case status of
+    Client.PACKET_OK -> do
+      dst <- mallocBytes (fromIntegral size)
+      copyBytes dst dataPtr (fromIntegral size)
+      bs <- UBS.unsafePackMallocCStringLen (castPtr dst, fromIntegral size)
+      putMVar mbox (timestamp, Right (P.SomePacketData bs))
+      P.freePacketData packet
+    s -> do
+      putMVar mbox (timestamp, Left s)
+      P.freePacketData packet
 
 clientDeinit :: Client -> IO ()
 clientDeinit Client{cClient, cPacketPtr} = do
@@ -102,6 +116,9 @@ sendRequest :: Client -> Client.Packet -> IO Client.ClientStatus
 sendRequest Client{cClient, cPacketPtr} packet = do
   poke cPacketPtr packet
   [C.block| TB_CLIENT_STATUS { tb_client_submit($(tb_client_t * cClient), $(tb_packet_t * cPacketPtr)); } |]
+
+waitCallback :: Client -> IO CallbackMessage
+waitCallback Client{cMailbox} = takeMVar cMailbox
 
 -- * Callbacks
 
