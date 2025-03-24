@@ -32,6 +32,7 @@ library
     , template-haskell
     , text
     , transformers
+    , uuid
     , vector
     , wide-word
 
@@ -39,6 +40,7 @@ library
   exposed-modules:
     TigerBeetle
     TigerBeetle.Error
+    TigerBeetle.Identifier
     TigerBeetle.Internal.C
     TigerBeetle.Internal.Client
     TigerBeetle.Internal.Context

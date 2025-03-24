@@ -22,6 +22,7 @@ import Foreign.Marshal.Utils
 import Foreign.Ptr
 import Foreign.Storable
 import Prelude hiding (id)
+import TigerBeetle.Identifier
 
 #include <tb_client.h>
 
@@ -55,8 +56,10 @@ instance Show AccountFlags where
           [singleFlag] -> showString (accountFlagName singleFlag)
           multipleFlags -> showParen (p > 5) $ showString (intercalate ".|." $ map accountFlagName multipleFlags)
 
+data Ledger
+
 data Account = Account
-  { id :: {-# UNPACK #-} !Word128,
+  { id :: {-# UNPACK #-} !(Id128 Account),
     debits_pending :: {-# UNPACK #-} !Word128,
     debits_posted :: {-# UNPACK #-} !Word128,
     credits_pending :: {-# UNPACK #-} !Word128,
@@ -64,7 +67,7 @@ data Account = Account
     user_data_128 :: {-# UNPACK #-} !Word128,
     user_data_64 :: {-# UNPACK #-} !Word64,
     user_data_32 :: {-# UNPACK #-} !Word32,
-    ledger :: {-# UNPACK #-} !Word32,
+    ledger :: {-# UNPACK #-} !(Id32 Ledger),
     code :: {-# UNPACK #-} !Word16,
     flags :: {-# UNPACK #-} !AccountFlags,
     timestamp :: {-# UNPACK #-} !Word64
@@ -137,16 +140,16 @@ instance Show TransferFlags where
           multipleFlags -> showParen (p > 5) $ showString (intercalate ".|." $ map transferFlagName multipleFlags)
 
 data Transfer = Transfer
-  { id :: {-# UNPACK #-} !Word128,
-    debit_account_id :: {-# UNPACK #-} !Word128,
-    credit_account_id :: {-# UNPACK #-} !Word128,
+  { id :: {-# UNPACK #-} !(Id128 Transfer),
+    debit_account_id :: {-# UNPACK #-} !(Id128 Account),
+    credit_account_id :: {-# UNPACK #-} !(Id128 Account),
     amount :: {-# UNPACK #-} !Word128,
-    pending_id :: {-# UNPACK #-} !Word128,
+    pending_id :: {-# UNPACK #-} !(Id128 Transfer),
     user_data_128 :: {-# UNPACK #-} !Word128,
     user_data_64 :: {-# UNPACK #-} !Word64,
     user_data_32 :: {-# UNPACK #-} !Word32,
     timeout :: {-# UNPACK #-} !Word32,
-    ledger :: {-# UNPACK #-} !Word32,
+    ledger :: {-# UNPACK #-} !(Id32 Ledger),
     code :: {-# UNPACK #-} !Word16,
     flags :: {-# UNPACK #-} !TransferFlags,
     timestamp :: {-# UNPACK #-} !Word64
@@ -517,7 +520,7 @@ data QueryFilter = QueryFilter
   { user_data_128 :: {-# UNPACK #-} !Word128,
     user_data_64 :: {-# UNPACK #-} !Word64,
     user_data_32 :: {-# UNPACK #-} !Word32,
-    ledger :: {-# UNPACK #-} !Word32,
+    ledger :: {-# UNPACK #-} !(Id32 Ledger),
     code :: {-# UNPACK #-} !Word16,
     timestamp_min :: {-# UNPACK #-} !Word64,
     timestamp_max :: {-# UNPACK #-} !Word64,
