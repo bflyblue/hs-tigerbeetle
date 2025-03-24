@@ -11,6 +11,9 @@ module TigerBeetle (
   I.Operation (..),
   I.Packet (..),
   I.Transfer (..),
+  Amount (..),
+  Timestamp (..),
+  I.Code (..),
   ClusterId,
   AccountId,
   TransferId,
@@ -30,9 +33,11 @@ import Control.Monad (unless)
 import Data.ByteString (ByteString)
 import Data.Word (Word64)
 import TigerBeetle.Identifier
+import TigerBeetle.Internal.Amount
 import TigerBeetle.Internal.C qualified as C
 import TigerBeetle.Internal.Client qualified as I
 import TigerBeetle.Internal.Packet qualified as P
+import TigerBeetle.Internal.Timestamp
 
 data TigerBeetleError
   = TBInitError I.InitStatus

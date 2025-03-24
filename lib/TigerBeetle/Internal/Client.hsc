@@ -23,8 +23,12 @@ import Foreign.Ptr
 import Foreign.Storable
 import Prelude hiding (id)
 import TigerBeetle.Identifier
+import TigerBeetle.Internal.Amount
+import TigerBeetle.Internal.Timestamp
 
 #include <tb_client.h>
+
+newtype Code = Code Word16 deriving (Eq, Ord, Show, Read, Num, Real, Storable, Prim, Bits)
 
 testFlags :: Bits f => f -> f -> Bool
 testFlags f b = f .&. b == b
@@ -60,17 +64,17 @@ data Ledger
 
 data Account = Account
   { id :: {-# UNPACK #-} !(Id128 Account),
-    debits_pending :: {-# UNPACK #-} !Word128,
-    debits_posted :: {-# UNPACK #-} !Word128,
-    credits_pending :: {-# UNPACK #-} !Word128,
-    credits_posted :: {-# UNPACK #-} !Word128,
+    debits_pending :: {-# UNPACK #-} !Amount,
+    debits_posted :: {-# UNPACK #-} !Amount,
+    credits_pending :: {-# UNPACK #-} !Amount,
+    credits_posted :: {-# UNPACK #-} !Amount,
     user_data_128 :: {-# UNPACK #-} !Word128,
     user_data_64 :: {-# UNPACK #-} !Word64,
     user_data_32 :: {-# UNPACK #-} !Word32,
     ledger :: {-# UNPACK #-} !(Id32 Ledger),
-    code :: {-# UNPACK #-} !Word16,
+    code :: {-# UNPACK #-} !Code,
     flags :: {-# UNPACK #-} !AccountFlags,
-    timestamp :: {-# UNPACK #-} !Word64
+    timestamp :: {-# UNPACK #-} !Timestamp
   }
   deriving (Show, Read, Eq, Ord)
 
@@ -143,16 +147,16 @@ data Transfer = Transfer
   { id :: {-# UNPACK #-} !(Id128 Transfer),
     debit_account_id :: {-# UNPACK #-} !(Id128 Account),
     credit_account_id :: {-# UNPACK #-} !(Id128 Account),
-    amount :: {-# UNPACK #-} !Word128,
+    amount :: {-# UNPACK #-} !Amount,
     pending_id :: {-# UNPACK #-} !(Id128 Transfer),
     user_data_128 :: {-# UNPACK #-} !Word128,
     user_data_64 :: {-# UNPACK #-} !Word64,
     user_data_32 :: {-# UNPACK #-} !Word32,
     timeout :: {-# UNPACK #-} !Word32,
     ledger :: {-# UNPACK #-} !(Id32 Ledger),
-    code :: {-# UNPACK #-} !Word16,
+    code :: {-# UNPACK #-} !Code,
     flags :: {-# UNPACK #-} !TransferFlags,
-    timestamp :: {-# UNPACK #-} !Word64
+    timestamp :: {-# UNPACK #-} !Timestamp
   }
   deriving (Show, Read, Eq, Ord)
 
@@ -435,8 +439,8 @@ data AccountFilter = AccountFilter
     user_data_64 :: {-# UNPACK #-} !Word64,
     user_data_32 :: {-# UNPACK #-} !Word32,
     code :: {-# UNPACK #-} !Word16,
-    timestamp_min :: {-# UNPACK #-} !Word64,
-    timestamp_max :: {-# UNPACK #-} !Word64,
+    timestamp_min :: {-# UNPACK #-} !Timestamp,
+    timestamp_max :: {-# UNPACK #-} !Timestamp,
     limit :: {-# UNPACK #-} !Word32,
     flags :: {-# UNPACK #-} !AccountFilterFlags
   }
@@ -490,11 +494,11 @@ instance Show AccountFilterFlags where
           multipleFlags -> showParen (p > 5) $ showString (intercalate ".|." $ map accountFilterFlagsName multipleFlags)
 
 data AccountBalance = AccountBalance
-  { debits_pending :: {-# UNPACK #-} !Word128,
-    debits_posted :: {-# UNPACK #-} !Word128,
-    credits_pending :: {-# UNPACK #-} !Word128,
-    credits_posted :: {-# UNPACK #-} !Word128,
-    timestamp :: {-# UNPACK #-} !Word64
+  { debits_pending :: {-# UNPACK #-} !Amount,
+    debits_posted :: {-# UNPACK #-} !Amount,
+    credits_pending :: {-# UNPACK #-} !Amount,
+    credits_posted :: {-# UNPACK #-} !Amount,
+    timestamp :: {-# UNPACK #-} !Timestamp
   }
   deriving (Show, Read, Eq, Ord)
 
@@ -522,8 +526,8 @@ data QueryFilter = QueryFilter
     user_data_32 :: {-# UNPACK #-} !Word32,
     ledger :: {-# UNPACK #-} !(Id32 Ledger),
     code :: {-# UNPACK #-} !Word16,
-    timestamp_min :: {-# UNPACK #-} !Word64,
-    timestamp_max :: {-# UNPACK #-} !Word64,
+    timestamp_min :: {-# UNPACK #-} !Timestamp,
+    timestamp_max :: {-# UNPACK #-} !Timestamp,
     limit :: {-# UNPACK #-} !Word32,
     flags :: {-# UNPACK #-} !Word32
   }

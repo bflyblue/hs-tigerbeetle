@@ -31,6 +31,7 @@ library
     , streamly
     , template-haskell
     , text
+    , time
     , transformers
     , uuid
     , vector
@@ -41,10 +42,12 @@ library
     TigerBeetle
     TigerBeetle.Error
     TigerBeetle.Identifier
+    TigerBeetle.Internal.Amount
     TigerBeetle.Internal.C
     TigerBeetle.Internal.Client
     TigerBeetle.Internal.Context
     TigerBeetle.Internal.Packet
+    TigerBeetle.Internal.Timestamp
 
 executable tigerbeetle
   main-is:          Main.hs
