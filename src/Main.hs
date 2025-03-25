@@ -23,3 +23,5 @@ main = do
     putStrLn $ "Result: " ++ show result3
     result4 <- getAccountTransfers client filter1
     putStrLn $ "Result: " ++ show result4
+    result5 <- lookupTransfers client [1]
+    putStrLn $ "Result: " ++ show result5

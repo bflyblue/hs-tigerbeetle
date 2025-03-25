@@ -91,6 +91,7 @@
             buildInputs = with haskellPackages; [
               cabal-install
               haskell-language-server
+              pkgs.zig_0_13
             ];
             withHoogle = true;
             
