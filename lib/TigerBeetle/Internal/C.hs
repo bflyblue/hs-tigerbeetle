@@ -82,6 +82,47 @@ clientInit clusterId address = do
       freeHaskellFunPtr cCallbackFunPtr
       pure (Left s)
 
+clientInitEcho :: Word128 -> ByteString -> IO (Either Client.InitStatus Client)
+clientInitEcho clusterId address = do
+  -- Allocate space to store the opaque client handle
+  cClient <- calloc @Client.TBClient
+
+  -- For now, we don't need a context, so we can pass nullPtr
+  let ctx = ptrToCUIntPtr nullPtr
+
+  -- Create a mailbox to communicate with the callback
+  cMailbox <- newEmptyMVar
+
+  -- Create a callback function that puts a message in the mailbox
+  cCallbackFunPtr <- mkCallback (callback cMailbox)
+
+  -- Allocate space to store the packet
+  cPacketPtr <- malloc @Client.Packet
+
+  -- Initialize the echo client
+  initStatus <- with (word128le clusterId) $ \clusterIdPtr -> do
+    let clusterIdPtr' = castPtr clusterIdPtr
+    [C.exp| TB_INIT_STATUS {
+      tb_client_init_echo(
+        $(tb_client_t * cClient),
+        $(uint8_t * clusterIdPtr'),
+        $bs-ptr:address,
+        $bs-len:address,
+        $(uintptr_t ctx),
+        $(void (*cCallbackFunPtr)(uintptr_t, tb_packet_t *, uint64_t, const uint8_t *, uint32_t))
+      )
+    } |]
+
+  case initStatus of
+    Client.INIT_SUCCESS ->
+      -- If the client was initialized successfully, return it
+      pure (Right Client{cClient, cCallbackFunPtr, cMailbox, cPacketPtr})
+    s -> do
+      -- Otherwise, free the client and return the error
+      free cClient
+      freeHaskellFunPtr cCallbackFunPtr
+      pure (Left s)
+
 callback :: Mailbox -> CUIntPtr -> Ptr Client.Packet -> Word64 -> Ptr Word8 -> Word32 -> IO ()
 callback mbox _ctxIntPtr packetPtr timestamp dataPtr size = do
   packet <- peek packetPtr

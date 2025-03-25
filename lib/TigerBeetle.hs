@@ -11,6 +11,11 @@ module TigerBeetle (
   I.Operation (..),
   I.Packet (..),
   I.Transfer (..),
+  I.AccountFlags (..),
+  I.CreateAccountResult (..),
+  I.CreateAccountsResult (..),
+  I.CreateTransfersResult (..),
+  I.TransferFlags (..),
   Amount (..),
   Timestamp (..),
   I.Code (..),
@@ -21,6 +26,10 @@ module TigerBeetle (
   newClient,
   destroyClient,
   withClient,
+  newEchoClient,
+  withEchoClient,
+  sendRequest,
+  echoRequest,
 
   -- * TigerBeetle Requests
   createAccounts,
@@ -31,6 +40,16 @@ module TigerBeetle (
   getAccountBalances,
   queryAccounts,
   queryTransfers,
+
+  -- * Echo Requests
+  echoCreateAccounts,
+  echoCreateTransfers,
+  echoLookupAccounts,
+  echoLookupTransfers,
+  echoGetAccountTransfers,
+  echoGetAccountBalances,
+  echoQueryAccounts,
+  echoQueryTransfers,
 ) where
 
 import Control.Exception (Exception, bracket, throwIO)
@@ -75,6 +94,19 @@ withClient clusterId address =
     (newClient clusterId address)
     destroyClient
 
+newEchoClient :: ClusterId -> ByteString -> IO C.Client
+newEchoClient (Id128 clusterId) address = do
+  result <- C.clientInitEcho clusterId address
+  case result of
+    Left status -> throwIO (TBInitError status)
+    Right client -> pure client
+
+withEchoClient :: ClusterId -> ByteString -> (C.Client -> IO a) -> IO a
+withEchoClient clusterId address =
+  bracket
+    (newEchoClient clusterId address)
+    destroyClient
+
 fromCallback :: (P.PacketData a) => C.Client -> IO (Either I.PacketStatus (Word64, a))
 fromCallback client = do
   (timestamp, msg) <- C.waitCallback client
@@ -84,9 +116,25 @@ fromCallback client = do
       a <- P.castSomePacketData somePacketData
       pure (Right (timestamp, a))
 
-sendRequest :: C.Client -> I.Packet -> IO I.ClientStatus
-sendRequest client packet = do
-  C.sendRequest client packet
+sendRequest :: (P.PacketData a, P.PacketData b) => C.Client -> I.Operation -> a -> IO b
+sendRequest client op body = do
+  packet <- P.newPacketData op body
+  clientStatus <- C.sendRequest client packet
+  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
+  cb <- fromCallback client
+  case cb of
+    Left status -> throwIO (TBPacketError status)
+    Right (_time, results) -> pure results
+
+echoRequest :: (P.PacketData a) => C.Client -> I.Operation -> a -> IO a
+echoRequest client op body = do
+  packet <- P.newPacketData op body
+  clientStatus <- C.sendRequest client packet
+  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
+  cb <- fromCallback client
+  case cb of
+    Left status -> throwIO (TBPacketError status)
+    Right (_time, results) -> pure results
 
 -- * TigerBeetle Requests
 
@@ -258,14 +306,10 @@ it must be greater than the last timestamp assigned to any Account in the
 cluster and cannot be equal to the timestamp of any existing Transfer.
 -}
 createAccounts :: C.Client -> [I.Account] -> IO [I.CreateAccountsResult]
-createAccounts client accounts = do
-  packet <- P.newPacketData I.OPERATION_CREATE_ACCOUNTS accounts
-  clientStatus <- sendRequest client packet
-  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
-  cb <- fromCallback client
-  case cb of
-    Left status -> throwIO (TBPacketError status)
-    Right (_time, results) -> pure results
+createAccounts client = sendRequest client I.OPERATION_CREATE_ACCOUNTS
+
+echoCreateAccounts :: C.Client -> [I.Account] -> IO [I.Account]
+echoCreateAccounts client = echoRequest client I.OPERATION_CREATE_ACCOUNTS
 
 {- | Create one or more Transfers. A successfully created transfer will modify
      the amount fields of its debit and credit accounts.
@@ -855,14 +899,10 @@ credit_account.credits_posted + 1 would exceed credit_account.debits_posted.
 (Client release < 0.16.0)
 -}
 createTransfers :: C.Client -> [I.Transfer] -> IO [I.CreateTransfersResult]
-createTransfers client transfers = do
-  packet <- P.newPacketData I.OPERATION_CREATE_TRANSFERS transfers
-  clientStatus <- sendRequest client packet
-  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
-  cb <- fromCallback client
-  case cb of
-    Left status -> throwIO (TBPacketError status)
-    Right (_time, results) -> pure results
+createTransfers client = sendRequest client I.OPERATION_CREATE_TRANSFERS
+
+echoCreateTransfers :: C.Client -> [I.Transfer] -> IO [I.Transfer]
+echoCreateTransfers client = echoRequest client I.OPERATION_CREATE_TRANSFERS
 
 {- | Fetch one or more accounts by their ids.
 
@@ -884,14 +924,10 @@ Result
   * If the account does not exist, return nothing.
 -}
 lookupAccounts :: C.Client -> [AccountId] -> IO [I.Account]
-lookupAccounts client accountIds = do
-  packet <- P.newPacketData I.OPERATION_LOOKUP_ACCOUNTS accountIds
-  clientStatus <- sendRequest client packet
-  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
-  cb <- fromCallback client
-  case cb of
-    Left status -> throwIO (TBPacketError status)
-    Right (_time, results) -> pure results
+lookupAccounts client = sendRequest client I.OPERATION_LOOKUP_ACCOUNTS
+
+echoLookupAccounts :: C.Client -> [AccountId] -> IO [AccountId]
+echoLookupAccounts client = echoRequest client I.OPERATION_LOOKUP_ACCOUNTS
 
 {- | Fetch one or more transfers by their ids.
 
@@ -901,14 +937,10 @@ Result
   * If the transfer does not exist, return nothing.
 -}
 lookupTransfers :: C.Client -> [TransferId] -> IO [I.Transfer]
-lookupTransfers client transferIds = do
-  packet <- P.newPacketData I.OPERATION_LOOKUP_TRANSFERS transferIds
-  clientStatus <- sendRequest client packet
-  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
-  cb <- fromCallback client
-  case cb of
-    Left status -> throwIO (TBPacketError status)
-    Right (_time, results) -> pure results
+lookupTransfers client = sendRequest client I.OPERATION_LOOKUP_TRANSFERS
+
+echoLookupTransfers :: C.Client -> [TransferId] -> IO [TransferId]
+echoLookupTransfers client = echoRequest client I.OPERATION_LOOKUP_TRANSFERS
 
 {- | Fetch Transfers involving a given Account.
 
@@ -923,14 +955,10 @@ Result
     timestamp_max.
 -}
 getAccountTransfers :: C.Client -> I.AccountFilter -> IO [I.Transfer]
-getAccountTransfers client accountFilter = do
-  packet <- P.newPacketData I.OPERATION_GET_ACCOUNT_TRANSFERS accountFilter
-  clientStatus <- sendRequest client packet
-  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
-  cb <- fromCallback client
-  case cb of
-    Left status -> throwIO (TBPacketError status)
-    Right (_time, results) -> pure results
+getAccountTransfers client = sendRequest client I.OPERATION_GET_ACCOUNT_TRANSFERS
+
+echoGetAccountTransfers :: C.Client -> I.AccountFilter -> IO I.AccountFilter
+echoGetAccountTransfers client = echoRequest client I.OPERATION_GET_ACCOUNT_TRANSFERS
 
 {- | Fetch the historical AccountBalances of a given Account.
 
@@ -953,14 +981,10 @@ Result
   * If any constraint is violated, return nothing.
 -}
 getAccountBalances :: C.Client -> I.AccountFilter -> IO [I.AccountBalance]
-getAccountBalances client accountFilter = do
-  packet <- P.newPacketData I.OPERATION_GET_ACCOUNT_BALANCES accountFilter
-  clientStatus <- sendRequest client packet
-  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
-  cb <- fromCallback client
-  case cb of
-    Left status -> throwIO (TBPacketError status)
-    Right (_time, results) -> pure results
+getAccountBalances client = sendRequest client I.OPERATION_GET_ACCOUNT_BALANCES
+
+echoGetAccountBalances :: C.Client -> I.AccountFilter -> IO I.AccountFilter
+echoGetAccountBalances client = echoRequest client I.OPERATION_GET_ACCOUNT_BALANCES
 
 {- | Query Accounts by the intersection of some fields and by timestamp range.
 
@@ -979,14 +1003,10 @@ Result
    page through them using the QueryFilter's timestamp_min and/or timestamp_max.
 -}
 queryAccounts :: C.Client -> I.AccountFilter -> IO [I.Account]
-queryAccounts client accountFilter = do
-  packet <- P.newPacketData I.OPERATION_QUERY_ACCOUNTS accountFilter
-  clientStatus <- sendRequest client packet
-  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
-  cb <- fromCallback client
-  case cb of
-    Left status -> throwIO (TBPacketError status)
-    Right (_time, results) -> pure results
+queryAccounts client = sendRequest client I.OPERATION_QUERY_ACCOUNTS
+
+echoQueryAccounts :: C.Client -> I.AccountFilter -> IO I.AccountFilter
+echoQueryAccounts client = echoRequest client I.OPERATION_QUERY_ACCOUNTS
 
 {- | Query Transfers by the intersection of some fields and by timestamp range.
 
@@ -1000,11 +1020,7 @@ Result
     page through them using the QueryFilter's timestamp_min and/or timestamp_max.
 -}
 queryTransfers :: C.Client -> I.QueryFilter -> IO [I.Transfer]
-queryTransfers client queryFilter = do
-  packet <- P.newPacketData I.OPERATION_QUERY_TRANSFERS queryFilter
-  clientStatus <- sendRequest client packet
-  unless (clientStatus == I.CLIENT_OK) $ throwIO (TBClientError clientStatus)
-  cb <- fromCallback client
-  case cb of
-    Left status -> throwIO (TBPacketError status)
-    Right (_time, results) -> pure results
+queryTransfers client = sendRequest client I.OPERATION_QUERY_TRANSFERS
+
+echoQueryTransfers :: C.Client -> I.QueryFilter -> IO I.QueryFilter
+echoQueryTransfers client = echoRequest client I.OPERATION_QUERY_TRANSFERS

@@ -1,21 +1,19 @@
 cabal-version: 2.4
 name:          tigerbeetle
 version:       0.1.0.0
+synopsis:      Haskell client for TigerBeetle
+description:
+  A Haskell client library for the TigerBeetle accounting database
 
--- A short (one-line) description of the package.
--- synopsis:
--- A longer description of the package.
--- description:
--- A URL where users can report bugs.
--- bug-reports:
--- The license under which the package is released.
--- license:
+category:      Database
+license:       BSD-3-Clause
+license-file:  LICENSE
 author:        Shaun Sharples
 maintainer:    shaun.sharples@gmail.com
+build-type:    Simple
 
 -- A copyright notice.
 -- copyright:
--- category:
 -- extra-source-files: CHANGELOG.md
 library
   hs-source-dirs:   lib
@@ -49,17 +47,17 @@ library
     TigerBeetle.Internal.Packet
     TigerBeetle.Internal.Timestamp
 
-executable tigerbeetle
+test-suite tigerbeetle-test
+  type:             exitcode-stdio-1.0
   main-is:          Main.hs
-  hs-source-dirs:   src
+  hs-source-dirs:   test
   default-language: GHC2021
   ghc-options:      -Wall -O -threaded
-
-  -- other-modules:
   build-depends:
     , base
-    , resourcet
-    , streamly
+    , bytestring
+    , tasty
+    , tasty-hunit
     , text
     , tigerbeetle
     , wide-word
