@@ -28,7 +28,7 @@ import TigerBeetle.Internal.Timestamp
 
 #include <tb_client.h>
 
-newtype Code = Code Word16 deriving (Eq, Ord, Show, Read, Num, Real, Storable, Prim, Bits)
+newtype Code = Code Word16 deriving (Eq, Ord, Show, Read, Num, Enum, Real, Integral, Storable, Prim, Bits)
 
 testFlags :: Bits f => f -> f -> Bool
 testFlags f b = f .&. b == b
